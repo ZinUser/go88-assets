@@ -1,0 +1,2 @@
+/admin https://go88-px7q.onrender.com/admin 302
+/admin/* https://go88-px7q.onrender.com/admin/:splat 302
