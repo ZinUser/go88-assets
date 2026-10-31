@@ -326,6 +326,72 @@
         }
     }
 
+    function syncBeadRoadAnimation(main) {
+        try {
+            if (!main || !Array.isArray(main.dotLogs)) return;
+            var layout = (main.dotLogs[0] && main.dotLogs[0].node && main.dotLogs[0].node.parent)
+                ? main.dotLogs[0].node.parent.getComponent(cc.Layout)
+                : null;
+            if (layout) {
+                layout.enabled = false;
+            }
+            for (var i = 0; i < main.dotLogs.length; i++) {
+                var dot = main.dotLogs[i];
+                if (!dot || !dot.node) continue;
+                var node = dot.node;
+                var anim = node.getComponent(cc.Animation);
+                if (anim) {
+                    try { anim.stop(); } catch (e) {}
+                    anim.enabled = false;
+                }
+                var targetX = 240.5 - i * 37;
+                node.stopAllActions();
+                node.x = targetX;
+                node.y = 0;
+                node.scale = 1;
+                if (i === 0 && node.active) {
+                    node.runAction(cc.repeatForever(cc.sequence(
+                        cc.moveTo(0.42, targetX, 6),
+                        cc.moveTo(0.42, targetX, 0)
+                    )));
+                }
+            }
+        } catch (e) {
+            warn(e);
+        }
+    }
+
+    function triggerResultEffectAnim(main, isTai) {
+        try {
+            if (!main) return;
+            if (isTai) {
+                if (main.efTaiColor) {
+                    main.efTaiColor.active = true;
+                    var skT = main.efTaiColor.getComponent(sp.Skeleton);
+                    if (skT && typeof skT.setAnimation === 'function') {
+                        skT.setAnimation(0, 'tai', true);
+                    }
+                }
+                if (main.efTai) main.efTai.active = false;
+                if (main.efXiuColor) main.efXiuColor.active = false;
+                if (main.efXiu) main.efXiu.active = true;
+            } else {
+                if (main.efXiuColor) {
+                    main.efXiuColor.active = true;
+                    var skX = main.efXiuColor.getComponent(sp.Skeleton);
+                    if (skX && typeof skX.setAnimation === 'function') {
+                        skX.setAnimation(0, 'xiu', true);
+                    }
+                }
+                if (main.efXiu) main.efXiu.active = false;
+                if (main.efTaiColor) main.efTaiColor.active = false;
+                if (main.efTai) main.efTai.active = true;
+            }
+        } catch (e) {
+            warn(e);
+        }
+    }
+
     function revealMD5Result(main) {
         try {
             main = main || (S.tx && S.tx.TX_Main);
@@ -341,24 +407,21 @@
             }
             refreshMd5Row();
 
-            // 2. Reveal chấm kết quả cầu trên bàn & bảng thống kê
+            // 2. Reveal chấm kết quả cầu trên bàn & bảng thống kê (chống trùng phiên)
             var st = setting();
             if (S.md5PendingLog) {
-                st.logs.unshift(S.md5PendingLog);
-                if (st.logs.length > 120) st.logs.pop();
+                if (!Array.isArray(st.logs)) st.logs = [];
+                if (!st.logs[0] || Number(st.logs[0].phien) !== Number(S.md5PendingLog.phien)) {
+                    st.logs.unshift(S.md5PendingLog);
+                    if (st.logs.length > 120) st.logs.pop();
+                }
                 S.md5PendingLog = null;
             }
             if (typeof main.dataLogs === 'function') main.dataLogs();
             if (main.nodeKetQua) main.nodeKetQua.active = true;
             if (main.diemSo !== undefined) {
                 if (main.labelKetQua) main.labelKetQua.string = main.diemSo;
-                if (main.diemSo > 10) {
-                    if (main.efTaiColor) main.efTaiColor.active = true;
-                    if (main.efTai) main.efTai.active = false;
-                } else {
-                    if (main.efXiuColor) main.efXiuColor.active = true;
-                    if (main.efXiu) main.efXiu.active = false;
-                }
+                triggerResultEffectAnim(main, main.diemSo > 10);
             }
 
             // 3. Hiện hiệu ứng nổi + tiền thắng cược (hoặc trừ tiền)
@@ -818,21 +881,25 @@
                 st.time_remain = 48;
                 this.playTime();
             }
+            if (void 0 !== t.time_remain) {
+                st.time_remain = t.time_remain;
+                this.playTime();
+                this.nextRealTime();
+            }
             if (void 0 !== t.logs) {
-                st.logs = t.logs;
+                var incomingLogs = Array.isArray(t.logs) ? t.logs.slice() : [];
+                if ((S.md5WaitingReveal || this._diceDone === false) && S.md5PendingLog && incomingLogs.length && Number(incomingLogs[0].phien) === Number(S.md5PendingLog.phien)) {
+                    incomingLogs = incomingLogs.slice(1);
+                }
+                st.logs = incomingLogs;
                 this.dataLogs();
                 this.setPhien();
-                if (st.time_remain > 45) {
+                if (st.time_remain > 46 && this._diceDone !== false) {
                     this.setDice(true);
                     this.nodeTimeWait.active = true;
                     this.timeCuoc.node.active = false;
                 }
                 st.getLogs = true;
-            }
-            if (void 0 !== t.time_remain) {
-                st.time_remain = t.time_remain;
-                this.playTime();
-                this.nextRealTime();
             }
             if (void 0 !== t.sync_md5 && t.sync_md5) {
                 if (S.md5Revealed || (st.time_remain !== undefined && st.time_remain <= 46) || !S.md5tx) {
@@ -851,7 +918,7 @@
             }
             if (void 0 !== t.sync_time) {
                 var curTr = st.time_remain;
-                if (!this.timeInterval || curTr === undefined || curTr <= 0 || Math.abs(curTr - t.sync_time) >= 2) {
+                if (this._diceDone !== false && (!this.timeInterval || curTr === undefined || curTr <= 0 || Math.abs(curTr - t.sync_time) >= 2)) {
                     st.time_remain = t.sync_time;
                     this.playTime();
                     this.nextRealTime();
@@ -884,14 +951,23 @@
                     this._diceDone = false;
                     this._currentDices = [t.finish.dices[0], t.finish.dices[1], t.finish.dices[2]];
                     this.diemSo = t.finish.dices[0] + t.finish.dices[1] + t.finish.dices[2];
-                    this.setDice(true);
+                    if (Array.isArray(this.dice)) {
+                        this.dice.forEach(function (d) { if (d && d.node) d.node.active = false; });
+                    }
                     this.diceAnimation.node.active = true;
-                    if (this.xnAnimation[0] && this.xnAnimation[0].setToSetupPose) this.xnAnimation[0].setToSetupPose();
-                    if (this.xnAnimation[1] && this.xnAnimation[1].setToSetupPose) this.xnAnimation[1].setToSetupPose();
-                    if (this.xnAnimation[2] && this.xnAnimation[2].setToSetupPose) this.xnAnimation[2].setToSetupPose();
-                    this.xnAnimation[0].setAnimation(0, 'xi ngau bay ' + t.finish.dices[0], false);
-                    this.xnAnimation[1].setAnimation(0, 'xi ngau bay ' + t.finish.dices[1], false);
-                    this.xnAnimation[2].setAnimation(0, 'xi ngau bay ' + t.finish.dices[2], false);
+                    for (var di = 0; di < 3; di++) {
+                        var xn = this.xnAnimation[di];
+                        if (xn && xn.node) {
+                            xn.node.active = true;
+                            if (xn._skeleton && typeof xn._skeleton.setToSetupPose === 'function') {
+                                try { xn._skeleton.setToSetupPose(); } catch (e) {}
+                            }
+                            if (typeof xn.setToSetupPose === 'function') {
+                                try { xn.setToSetupPose(); } catch (e) {}
+                            }
+                            xn.setAnimation(0, 'xi ngau bay ' + t.finish.dices[di], false);
+                        }
+                    }
                     if (this.xnEffect) this.xnEffect.node.active = false;
                     setTimeout(function () {
                         if (this.xnEffect) this.xnEffect.node.active = false;
@@ -957,14 +1033,19 @@
                         else if (st.time_remain < 23) this.bg_Dice._animator._anims.array[0].speed = 6;
                         else if (st.time_remain < 33) this.bg_Dice._animator._anims.array[0].speed = 3;
                     }
-                    this.bg_efDice.active = true;
+                    if (this.bg_efDice && !this.bg_efDice.active) {
+                        this.bg_efDice.active = true;
+                        var efAnim = this.bg_efDice.getComponent(cc.Animation);
+                        if (efAnim) {
+                            try { efAnim.play(); } catch (e) {}
+                        }
+                    }
                     this._diceDone = true;
                     if (this.xnEffect) this.xnEffect.node.active = false;
                     if (this.diceAnimation) this.diceAnimation.node.active = false;
-                    if (!S.md5Revealed) {
+                    if (!S.md5Revealed && (S.md5WaitingReveal || S.md5PendingLog)) {
                         revealMD5Result(this);
                     }
-                    S.md5Revealed = false;
                     S.md5WaitingReveal = false;
                     if (S.pendingNextMd5) {
                         S.md5tx = S.pendingNextMd5;
@@ -1001,7 +1082,9 @@
         };
         md5Main.nextRealTime = function () {
             if (st.time_remain > 46) {
-                this.setDice(true);
+                if (this._diceDone !== false) {
+                    this.setDice(true);
+                }
                 this.nodeTimeWait.active = true;
                 this.timeCuoc.node.active = false;
                 var t = Helper.numberPad(st.time_remain - 46, 2);
@@ -1031,6 +1114,7 @@
                     e.node.active = false;
                 }
             });
+            syncBeadRoadAnimation(this);
             var e = [], i = [], n = [], o = [], c = -1, s = [], a = [], h = 0, r = 0;
             var d = st.logs.slice(0, 19);
             d.reverse();
@@ -1205,6 +1289,7 @@
                 localStorage.setItem('taixiumd5', true);
                 this.setTop();
                 this.regEvent(true);
+                syncBeadRoadAnimation(this.TX_Main);
                 refreshMd5Row();
             } else {
                 cc.RedT.inGame.dialog.showSignIn();
@@ -2756,6 +2841,16 @@
                 if (this.xnEffect) this.xnEffect.node.active = false;
             };
 
+            if (typeof txMain.dataLogs === 'function' && !txMain._beadRoadHooked) {
+                txMain._beadRoadHooked = true;
+                var origNormalDataLogs = txMain.dataLogs.bind(txMain);
+                txMain.dataLogs = function () {
+                    var res = origNormalDataLogs();
+                    syncBeadRoadAnimation(this);
+                    return res;
+                };
+            }
+
             // 1. Hook DiaNan cho bàn xanh
             var origNormalDiaNan = txMain.DiaNan.bind(txMain);
             txMain.DiaNan = function () {
@@ -2764,8 +2859,10 @@
                 this._txRevealed = true;
                 S.normalWaitingReveal = false;
                 if (this._pendingLog && cc.RedT.setting.taixiu.logs) {
-                    cc.RedT.setting.taixiu.logs.unshift(this._pendingLog);
-                    if (cc.RedT.setting.taixiu.logs.length > 120) cc.RedT.setting.taixiu.logs.pop();
+                    if (!cc.RedT.setting.taixiu.logs[0] || Number(cc.RedT.setting.taixiu.logs[0].phien) !== Number(this._pendingLog.phien)) {
+                        cc.RedT.setting.taixiu.logs.unshift(this._pendingLog);
+                        if (cc.RedT.setting.taixiu.logs.length > 120) cc.RedT.setting.taixiu.logs.pop();
+                    }
                     this._pendingLog = null;
                 }
                 var normalActive = !!(this.node && this.node.active && cc.RedT.MiniPanel.TaiXiu.node && cc.RedT.MiniPanel.TaiXiu.node.active);
@@ -2773,6 +2870,9 @@
                 if (!normalActive) cc.RedT.IS_SOUND = false;
                 try {
                     origNormalDiaNan();
+                    if (this.diemSo !== undefined) {
+                        triggerResultEffectAnim(this, this.diemSo > 10);
+                    }
                 } finally {
                     cc.RedT.IS_SOUND = origSound;
                 }
@@ -2814,7 +2914,13 @@
                             else if (tr < 23) this.bg_Dice._animator._anims.array[0].speed = 6;
                             else if (tr < 33) this.bg_Dice._animator._anims.array[0].speed = 3;
                         }
-                        this.bg_efDice.active = true;
+                        if (this.bg_efDice && !this.bg_efDice.active) {
+                            this.bg_efDice.active = true;
+                            var efAnim = this.bg_efDice.getComponent(cc.Animation);
+                            if (efAnim) {
+                                try { efAnim.play(); } catch (e) {}
+                            }
+                        }
                         this._diceDone = true;
                         if (this.xnEffect) this.xnEffect.node.active = false;
                         if (this.diceAnimation) this.diceAnimation.node.active = false;
@@ -2850,7 +2956,9 @@
             txMain.nextRealTime = function () {
                 var tr = cc.RedT.setting.taixiu.time_remain;
                 if (tr > 46) {
-                    this.setDice(true);
+                    if (this._diceDone !== false) {
+                        this.setDice(true);
+                    }
                     this.nodeTimeWait.active = true;
                     this.timeCuoc.node.active = false;
                     var t = Helper.numberPad(tr - 46, 2);
@@ -2905,7 +3013,7 @@
                     var syncTr = copyT.sync_time;
                     delete copyT.sync_time;
                     var curTxTr = cc.RedT.setting.taixiu.time_remain;
-                    if (!this.timeInterval || curTxTr === undefined || curTxTr <= 0 || Math.abs(curTxTr - syncTr) >= 2) {
+                    if (this._diceDone !== false && (!this.timeInterval || curTxTr === undefined || curTxTr <= 0 || Math.abs(curTxTr - syncTr) >= 2)) {
                         cc.RedT.setting.taixiu.time_remain = syncTr;
                         this.playTime();
                         this.nextRealTime();
@@ -2941,14 +3049,23 @@
                         this._pendingLog = {dice: [fin.dices[0], fin.dices[1], fin.dices[2]], phien: fin.phien};
                         this._currentDices = [fin.dices[0], fin.dices[1], fin.dices[2]];
                         this.diemSo = fin.dices[0] + fin.dices[1] + fin.dices[2];
-                        this.setDice(true);
+                        if (Array.isArray(this.dice)) {
+                            this.dice.forEach(function (d) { if (d && d.node) d.node.active = false; });
+                        }
                         if (this.diceAnimation) this.diceAnimation.node.active = true;
-                        if (this.xnAnimation[0] && this.xnAnimation[0].setToSetupPose) this.xnAnimation[0].setToSetupPose();
-                        if (this.xnAnimation[1] && this.xnAnimation[1].setToSetupPose) this.xnAnimation[1].setToSetupPose();
-                        if (this.xnAnimation[2] && this.xnAnimation[2].setToSetupPose) this.xnAnimation[2].setToSetupPose();
-                        this.xnAnimation[0].setAnimation(0, 'xi ngau bay ' + fin.dices[0], false);
-                        this.xnAnimation[1].setAnimation(0, 'xi ngau bay ' + fin.dices[1], false);
-                        this.xnAnimation[2].setAnimation(0, 'xi ngau bay ' + fin.dices[2], false);
+                        for (var di = 0; di < 3; di++) {
+                            var xn = this.xnAnimation[di];
+                            if (xn && xn.node) {
+                                xn.node.active = true;
+                                if (xn._skeleton && typeof xn._skeleton.setToSetupPose === 'function') {
+                                    try { xn._skeleton.setToSetupPose(); } catch (e) {}
+                                }
+                                if (typeof xn.setToSetupPose === 'function') {
+                                    try { xn.setToSetupPose(); } catch (e) {}
+                                }
+                                xn.setAnimation(0, 'xi ngau bay ' + fin.dices[di], false);
+                            }
+                        }
                         if (this.xnEffect) this.xnEffect.node.active = false;
                         setTimeout(function () {
                             if (this.xnEffect) this.xnEffect.node.active = false;

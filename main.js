@@ -172,7 +172,7 @@ window.boot = function () {
     var isLocalHost = (typeof window !== 'undefined' && window.location && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'));
     var isSelfCdn = (typeof window !== 'undefined' && window.location && (window.location.hostname.indexOf('.pages.dev') !== -1 || window.location.hostname.indexOf('.github.io') !== -1));
     var cdnBase = (!isLocalHost && !isSelfCdn) ? 'https://zinuser.github.io/go88-assets/' : '';
-    var _origOpen = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function (method, url) { if (typeof url === 'string' && (url.indexOf('0a6ca22fb.json') !== -1 || url.indexOf('0fe43f6fa.json') !== -1 || url.indexOf('013ad99b0.json') !== -1) && url.indexOf('?') === -1) { arguments[1] = url + '?v=29'; } return _origOpen.apply(this, arguments); }; var bundledScript = settings.debug ? 'src/project.dev.js' : (cdnBase + 'src/project.js?v=29');
+    var _origOpen = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function (method, url) { if (typeof url === 'string' && (url.indexOf('0a6ca22fb.json') !== -1 || url.indexOf('0fe43f6fa.json') !== -1 || url.indexOf('013ad99b0.json') !== -1) && url.indexOf('?') === -1) { arguments[1] = url + '?v=30'; } return _origOpen.apply(this, arguments); }; var bundledScript = settings.debug ? 'src/project.dev.js' : (cdnBase + 'src/project.js?v=30');
     if (jsList) {
         jsList = jsList.map(function (x) {
             return 'src/' + x;
